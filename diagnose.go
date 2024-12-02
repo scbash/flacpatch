@@ -16,7 +16,7 @@ func fmtTime(t time.Duration) string {
 	minutes := t.Truncate(time.Minute)
 	seconds := t - minutes
 
-	return fmt.Sprintf("%02.0f:%02.3f", minutes.Minutes(), seconds.Seconds())
+	return fmt.Sprintf("%02.0f:%06.3f", minutes.Minutes(), seconds.Seconds())
 }
 
 // Format duration like CD time CUE sheet (including frames)
@@ -24,15 +24,15 @@ func fmtTime(t time.Duration) string {
 // https://en.wikipedia.org/wiki/Compact_Disc_Digital_Audio#Frames_and_timecode_frames
 // https://en.wikipedia.org/wiki/Cue_sheet_(computing)
 // https://forum.videohelp.com/threads/394177-What-s-the-sector-format-on-audio-CDs
-func fmtCDTime(t time.Duration) string {
-	minutes := t.Truncate(time.Minute)
-	only_seconds := t - minutes
-	seconds := only_seconds.Truncate(time.Second)
-	only_frames := only_seconds - seconds
-	frames := only_frames.Round(time.Duration(time.Second / 75))
-
-	return fmt.Sprintf("%02.0f:%02.0f:%02.0f", minutes.Minutes(), seconds.Seconds(), float64(frames.Nanoseconds())/1e7)
-}
+// func fmtCDTime(t time.Duration) string {
+// 	minutes := t.Truncate(time.Minute)
+// 	only_seconds := t - minutes
+// 	seconds := only_seconds.Truncate(time.Second)
+// 	only_frames := only_seconds - seconds
+// 	frames := only_frames.Round(time.Duration(time.Second / 75))
+//
+// 	return fmt.Sprintf("%02.0f:%02.0f:%02.0f", minutes.Minutes(), seconds.Seconds(), float64(frames.Nanoseconds())/1e7)
+// }
 
 func main() {
 	// TODO: real arg parsing...
@@ -92,7 +92,8 @@ func main() {
 						start := time.Duration(float64(startSample) / float64(stream.Info.SampleRate) * float64(time.Second))
 						end := time.Duration(float64(endSample) / float64(stream.Info.SampleRate) * float64(time.Second))
 
-						progressbar.Bprintf(bar, "bad region: %s-%s (%s)\n", fmtCDTime(start), fmtCDTime(end), fmtTime(end-start))
+						progressbar.Bprintf(bar, "bad region: %s-%s (%s)\n", fmtTime(start), fmtTime(end), fmtTime(end-start))
+						// progressbar.Bprintf(bar, "bad region: %s-%s (%s)\n", fmtCDTime(start), fmtCDTime(end), fmtTime(end-start))
 						frame = inner_frame
 						break
 					}
