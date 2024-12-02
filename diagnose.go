@@ -1,13 +1,38 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
+	"time"
 
 	"github.com/mewkiz/flac"
 	"github.com/schollz/progressbar/v3"
 )
+
+// TODO: command line switch between default time (this) and CUE sheet time (CDTime below)
+func fmtTime(t time.Duration) string {
+	minutes := t.Truncate(time.Minute)
+	seconds := t - minutes
+
+	return fmt.Sprintf("%02.0f:%02.3f", minutes.Minutes(), seconds.Seconds())
+}
+
+// Format duration like CD time CUE sheet (including frames)
+// "The position is specified in mm:ss:ff (minute-second-frame) format. There are 75 such frames per second of audio."
+// https://en.wikipedia.org/wiki/Compact_Disc_Digital_Audio#Frames_and_timecode_frames
+// https://en.wikipedia.org/wiki/Cue_sheet_(computing)
+// https://forum.videohelp.com/threads/394177-What-s-the-sector-format-on-audio-CDs
+func fmtCDTime(t time.Duration) string {
+	minutes := t.Truncate(time.Minute)
+	only_seconds := t - minutes
+	seconds := only_seconds.Truncate(time.Second)
+	only_frames := only_seconds - seconds
+	frames := only_frames.Round(time.Duration(time.Second / 75))
+
+	return fmt.Sprintf("%02.0f:%02.0f:%02.0f", minutes.Minutes(), seconds.Seconds(), float64(frames.Nanoseconds())/1e7)
+}
 
 func main() {
 	// TODO: real arg parsing...
@@ -35,6 +60,7 @@ func main() {
 		searchBytes[1] = 0xF8
 	}
 
+	// TODO: lastGoodSample is more useful (and applicable to both blocking styles), but will be basically unreadable numbers
 	var lastGood uint64
 	lastGood = 0
 	bar := progressbar.Default(int64(stream.Info.NSamples), "reading")
@@ -59,7 +85,14 @@ func main() {
 					f.Seek(-2, io.SeekCurrent)
 					inner_frame, err2 := stream.ParseNext()
 					if err2 == nil {
-						progressbar.Bprintf(bar, "Found good header! (offset: %d) %d\n", byte_offset, inner_frame.Header.Num)
+						progressbar.Bprintf(bar, "Found good header! (offset: %d) %d\n", byte_offset, inner_frame.Num)
+
+						startSample := lastGood * uint64(stream.Info.BlockSizeMin)
+						endSample := (inner_frame.Num - 1) * uint64(stream.Info.BlockSizeMin)
+						start := time.Duration(float64(startSample) / float64(stream.Info.SampleRate) * float64(time.Second))
+						end := time.Duration(float64(endSample) / float64(stream.Info.SampleRate) * float64(time.Second))
+
+						progressbar.Bprintf(bar, "bad region: %s-%s (%s)\n", fmtCDTime(start), fmtCDTime(end), fmtTime(end-start))
 						frame = inner_frame
 						break
 					}
