@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/mewkiz/flac"
+	"github.com/schollz/progressbar/v3"
 )
 
 func main() {
@@ -36,14 +37,16 @@ func main() {
 
 	var lastGood uint64
 	lastGood = 0
+	bar := progressbar.Default(int64(stream.Info.NSamples), "reading")
 	for {
 		frame, err := stream.ParseNext()
 		if err == io.EOF {
-			log.Println("Reached EOF, ending...")
+			progressbar.Bprintf(bar, "Reached EOF, ending...")
+			bar.Finish()
 			break
 		}
 		if err != nil {
-			log.Printf("Found bad frame (lastGood = %d), searching for next good one...\n", lastGood)
+			progressbar.Bprintf(bar, "Found bad frame (lastGood = %d), searching for next good one...\n", lastGood)
 			byte_offset := 0
 			for {
 				buf := make([]byte, 2)
@@ -56,7 +59,7 @@ func main() {
 					f.Seek(-2, io.SeekCurrent)
 					inner_frame, err2 := stream.ParseNext()
 					if err2 == nil {
-						log.Printf("Found good header! (offset: %d) %d\n", byte_offset, inner_frame.Header.Num)
+						progressbar.Bprintf(bar, "Found good header! (offset: %d) %d\n", byte_offset, inner_frame.Header.Num)
 						frame = inner_frame
 						break
 					}
@@ -64,5 +67,6 @@ func main() {
 			}
 		}
 		lastGood = frame.Num
+		bar.Set64(int64(frame.SampleNumber()))
 	}
 }
