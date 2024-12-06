@@ -5,8 +5,10 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"time"
 
+	cuesheetgo "github.com/lmvgo/cue"
 	"github.com/mewkiz/flac"
 	"github.com/schollz/progressbar/v3"
 )
@@ -60,6 +62,12 @@ func main() {
 		searchBytes[1] = 0xF8
 	}
 
+	type badRegion struct {
+		start time.Duration
+		end   time.Duration
+	}
+	var badRegions []badRegion
+
 	// TODO: lastGoodSample is more useful (and applicable to both blocking styles), but will be basically unreadable numbers
 	var lastGood uint64
 	lastGood = 0
@@ -91,6 +99,7 @@ func main() {
 						endSample := (inner_frame.Num - 1) * uint64(stream.Info.BlockSizeMin)
 						start := time.Duration(float64(startSample) / float64(stream.Info.SampleRate) * float64(time.Second))
 						end := time.Duration(float64(endSample) / float64(stream.Info.SampleRate) * float64(time.Second))
+						badRegions = append(badRegions, badRegion{start, end})
 
 						progressbar.Bprintf(bar, "bad region: %s-%s (%s)\n", fmtTime(start), fmtTime(end), fmtTime(end-start))
 						// progressbar.Bprintf(bar, "bad region: %s-%s (%s)\n", fmtCDTime(start), fmtCDTime(end), fmtTime(end-start))
@@ -103,4 +112,60 @@ func main() {
 		lastGood = frame.Num
 		bar.Set64(int64(frame.SampleNumber() / uint64(frame.SampleRate)))
 	}
+
+	cuefile := strings.TrimSuffix(filename, ".flac.part") + ".cue" // TODO: command line arg?
+	c, err := os.Open(cuefile)
+	if err != nil {
+		log.Fatalf("Unable to open cuesheet %s: %s\n", cuefile, err)
+	}
+
+	cuesheet, err := cuesheetgo.Parse(c)
+	if err != nil {
+		log.Fatalln("Unable to parse cuesheet: ", err)
+	}
+
+	curBadRegion := 0
+	goodTracks := 0
+	for t, track := range cuesheet.Tracks {
+		trackStart := track.Index01.Timestamp
+		var trackEnd time.Duration
+		if t < len(cuesheet.Tracks)-1 {
+			trackEnd = cuesheet.Tracks[t+1].Index01.Timestamp
+		} else {
+			// Special case for last track
+			// May not be entirely accurate due to integer division, but should be
+			// close enough for our needs
+			trackEnd = time.Duration(stream.Info.NSamples / uint64(stream.Info.SampleRate) * uint64(time.Second))
+		}
+
+		for curBadRegion < len(badRegions) {
+			badRegionStart := badRegions[curBadRegion].start
+			badRegionEnd := badRegions[curBadRegion].end
+
+			if badRegionStart > trackEnd {
+				// Track is good, export it
+				log.Printf("Track %d good, export %s to %s\n", t+1, fmtTime(trackStart), fmtTime(trackEnd))
+				goodTracks++
+				break
+			} else if badRegionEnd < trackStart {
+				// Advance to next bad region (and retest)
+				// log.Printf("Bad region %d in the past (ended at %s, track %d starts at %s), advancing...",
+				// 	curBadRegion+1, fmtTime(badRegionEnd), t+1, fmtTime(trackStart))
+				curBadRegion++
+			} else {
+				// Track is damaged
+				log.Printf("Track %d (%s-%s) damaged by region %d (%s-%s)",
+					t+1, fmtTime(trackStart), fmtTime(trackEnd),
+					curBadRegion+1, fmtTime(badRegionStart), fmtTime(badRegionEnd))
+				break
+			}
+		}
+
+		if badRegions[len(badRegions)-1].end < trackStart {
+			// No more bad regions left, track is good, export it
+			log.Printf("Track %d good, export %s to %s\n", t+1, fmtTime(trackStart), fmtTime(trackEnd))
+			goodTracks++
+		}
+	}
+	log.Printf("Recovered %d of %d tracks\n", goodTracks, len(cuesheet.Tracks))
 }

@@ -3,9 +3,12 @@ module github.com/scbash/flacpatch
 go 1.23.1
 
 require (
+	github.com/lmvgo/cue v0.0.0-20241121104733-ca11745308b8
 	github.com/mewkiz/flac v1.0.12
 	github.com/schollz/progressbar/v3 v3.17.1
 )
+
+replace github.com/lmvgo/cue => github.com/scbash/cuesheetgo v0.0.0-20241206060017-5cb968baf70d
 
 require (
 	github.com/icza/bitio v1.1.0 // indirect
