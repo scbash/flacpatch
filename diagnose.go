@@ -63,16 +63,16 @@ func main() {
 	// TODO: lastGoodSample is more useful (and applicable to both blocking styles), but will be basically unreadable numbers
 	var lastGood uint64
 	lastGood = 0
-	bar := progressbar.Default(int64(stream.Info.NSamples), "reading")
+	bar := progressbar.Default(int64(stream.Info.NSamples)/int64(stream.Info.SampleRate), "reading")
 	for {
 		frame, err := stream.ParseNext()
 		if err == io.EOF {
-			progressbar.Bprintf(bar, "Reached EOF, ending...")
+			progressbar.Bprintln(bar, "Reached EOF, ending...")
 			bar.Finish()
 			break
 		}
 		if err != nil {
-			progressbar.Bprintf(bar, "Found bad frame (lastGood = %d), searching for next good one...\n", lastGood)
+			// progressbar.Bprintf(bar, "Found bad frame (lastGood = %d), searching for next good one...\n", lastGood)
 			byte_offset := 0
 			for {
 				buf := make([]byte, 2)
@@ -85,7 +85,7 @@ func main() {
 					f.Seek(-2, io.SeekCurrent)
 					inner_frame, err2 := stream.ParseNext()
 					if err2 == nil {
-						progressbar.Bprintf(bar, "Found good header! (offset: %d) %d\n", byte_offset, inner_frame.Num)
+						// progressbar.Bprintf(bar, "Found good header! (offset: %d) %d\n", byte_offset, inner_frame.Num)
 
 						startSample := lastGood * uint64(stream.Info.BlockSizeMin)
 						endSample := (inner_frame.Num - 1) * uint64(stream.Info.BlockSizeMin)
@@ -101,6 +101,6 @@ func main() {
 			}
 		}
 		lastGood = frame.Num
-		bar.Set64(int64(frame.SampleNumber()))
+		bar.Set64(int64(frame.SampleNumber() / uint64(frame.SampleRate)))
 	}
 }
