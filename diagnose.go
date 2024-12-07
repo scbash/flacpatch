@@ -16,28 +16,12 @@ import (
 	"github.com/schollz/progressbar/v3"
 )
 
-// TODO: command line switch between default time (this) and CUE sheet time (CDTime below)
 func fmtTime(t time.Duration) string {
 	minutes := t.Truncate(time.Minute)
 	seconds := t - minutes
 
 	return fmt.Sprintf("%02.0f:%06.3f", minutes.Minutes(), seconds.Seconds())
 }
-
-// Format duration like CD time CUE sheet (including frames)
-// "The position is specified in mm:ss:ff (minute-second-frame) format. There are 75 such frames per second of audio."
-// https://en.wikipedia.org/wiki/Compact_Disc_Digital_Audio#Frames_and_timecode_frames
-// https://en.wikipedia.org/wiki/Cue_sheet_(computing)
-// https://forum.videohelp.com/threads/394177-What-s-the-sector-format-on-audio-CDs
-// func fmtCDTime(t time.Duration) string {
-// 	minutes := t.Truncate(time.Minute)
-// 	only_seconds := t - minutes
-// 	seconds := only_seconds.Truncate(time.Second)
-// 	only_frames := only_seconds - seconds
-// 	frames := only_frames.Round(time.Duration(time.Second / 75))
-//
-// 	return fmt.Sprintf("%02.0f:%02.0f:%02.0f", minutes.Minutes(), seconds.Seconds(), float64(frames.Nanoseconds())/1e7)
-// }
 
 func indexToDuration(track *cuesheetgo.Track) time.Duration {
 	frameTime := time.Duration(float64(track.Index01.Frame) / 75 * float64(time.Second))
@@ -209,7 +193,6 @@ func exportTrack(original string, track *cuesheetgo.Track, trackNum int, lastTra
 		"--best",
 		"--verify",
 		"--silent",
-		// "--warnings-as-errors",
 	}
 
 	filename := fmt.Sprintf("%02d-%s.flac", trackNum+1, sanitizer.Replace(track.Title))
