@@ -36,6 +36,11 @@ func fmtTime(t time.Duration) string {
 // 	return fmt.Sprintf("%02.0f:%02.0f:%02.0f", minutes.Minutes(), seconds.Seconds(), float64(frames.Nanoseconds())/1e7)
 // }
 
+func indexToDuration(track *cuesheetgo.Track) time.Duration {
+	frameTime := time.Duration(float64(track.Index01.Frame) / 75 * float64(time.Second))
+	return track.Index01.Timestamp + frameTime
+}
+
 func main() {
 	// TODO: real arg parsing...
 	if len(os.Args) < 2 {
@@ -127,10 +132,10 @@ func main() {
 	curBadRegion := 0
 	goodTracks := 0
 	for t, track := range cuesheet.Tracks {
-		trackStart := track.Index01.Timestamp
+		trackStart := indexToDuration(track)
 		var trackEnd time.Duration
 		if t < len(cuesheet.Tracks)-1 {
-			trackEnd = cuesheet.Tracks[t+1].Index01.Timestamp
+			trackEnd = indexToDuration(cuesheet.Tracks[t+1])
 		} else {
 			// Special case for last track
 			// May not be entirely accurate due to integer division, but should be
