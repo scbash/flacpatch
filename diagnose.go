@@ -1,10 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -40,6 +43,20 @@ func indexToDuration(track *cuesheetgo.Track) time.Duration {
 	frameTime := time.Duration(float64(track.Index01.Frame) / 75 * float64(time.Second))
 	return track.Index01.Timestamp + frameTime
 }
+
+// My Python implementation of dbPowerAmp's filename rules
+// tr_table = str.maketrans(
+//
+//	' /:.*\\',          # input characters,
+//	'_--__-',           # replaced by these characters,
+//	'?,;()!"\'&<>|’¡', # while these characters are simply deleted!
+//
+// )
+var sanitizer *strings.Replacer = strings.NewReplacer(
+	" ", "_", ".", "_", "*", "_", "/", "-", ":", "-", "\\", "-",
+	"?", "", ",", "", ";", "", "(", "", ")", "", "!", "", "\"", "",
+	"'", "", "&", "", "<", "", ">", "", "|", "", "’", "", "¡", "",
+)
 
 func main() {
 	// TODO: real arg parsing...
@@ -150,6 +167,10 @@ func main() {
 			if badRegionStart > trackEnd {
 				// Track is good, export it
 				log.Printf("Track %d good, export %s to %s\n", t+1, fmtTime(trackStart), fmtTime(trackEnd))
+				err = exportTrack(filename, track, t, t == len(cuesheet.Tracks)-1, trackStart, trackEnd)
+				if err != nil {
+					log.Fatalln("Error exporting track: ", err)
+				}
 				goodTracks++
 				break
 			} else if badRegionEnd < trackStart {
@@ -169,8 +190,52 @@ func main() {
 		if badRegions[len(badRegions)-1].end < trackStart {
 			// No more bad regions left, track is good, export it
 			log.Printf("Track %d good, export %s to %s\n", t+1, fmtTime(trackStart), fmtTime(trackEnd))
+			err = exportTrack(filename, track, t, t == len(cuesheet.Tracks)-1, trackStart, trackEnd)
+			if err != nil {
+				log.Fatalln("Error exporting track: ", err)
+			}
 			goodTracks++
 		}
 	}
 	log.Printf("Recovered %d of %d tracks\n", goodTracks, len(cuesheet.Tracks))
+}
+
+func exportTrack(original string, track *cuesheetgo.Track, trackNum int, lastTrack bool, start, end time.Duration) error {
+	if track.Title == "" {
+		return errors.New("no track title")
+	}
+
+	args := []string{
+		"--best",
+		"--verify",
+		"--silent",
+		// "--warnings-as-errors",
+	}
+
+	filename := fmt.Sprintf("%02d-%s.flac", trackNum+1, sanitizer.Replace(track.Title))
+	full := filepath.Join(filepath.Dir(original), filename)
+	args = append(args, fmt.Sprintf("--output-name=%s", full))
+	args = append(args, fmt.Sprintf("--tag=TITLE=\"%s\"", track.Title))
+	if track.Performer != "" {
+		args = append(args, fmt.Sprintf("--tag=ARTIST=\"%s\"", track.Performer))
+	}
+	if start > 0 {
+		args = append(args, fmt.Sprintf("--skip=%s", fmtTime(start)))
+	}
+	if !lastTrack {
+		args = append(args, fmt.Sprintf("--until=%s", fmtTime(end)))
+	}
+	args = append(args, original)
+
+	flacOut, err := exec.Command("flac", args...).Output()
+	if err != nil {
+		exiterror, ok := err.(*exec.ExitError)
+		if ok {
+			return fmt.Errorf("error running flac (%s): %s", exiterror, exiterror.Stderr)
+		} else {
+			return fmt.Errorf("error starting flac (%s): %s", err, flacOut)
+		}
+	}
+
+	return nil
 }
