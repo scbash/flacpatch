@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -36,6 +35,7 @@ func indexToDuration(track *cuesheetgo.Track) time.Duration {
 //	'?,;()!"\'&<>|’¡', # while these characters are simply deleted!
 //
 // )
+// TODO: this doesn't remove all non-ASCII characters...
 var sanitizer *strings.Replacer = strings.NewReplacer(
 	" ", "_", ".", "_", "*", "_", "/", "-", ":", "-", "\\", "-",
 	"?", "", ",", "", ";", "", "(", "", ")", "", "!", "", "\"", "",
@@ -196,8 +196,8 @@ func exportTrack(original string, track *cuesheetgo.Track, trackNum int, lastTra
 	}
 
 	filename := fmt.Sprintf("%02d-%s.flac", trackNum+1, sanitizer.Replace(track.Title))
-	full := filepath.Join(filepath.Dir(original), filename)
-	args = append(args, fmt.Sprintf("--output-name=%s", full))
+	// full := filepath.Join(filepath.Dir(original), filename)
+	args = append(args, fmt.Sprintf("--output-name=%s", filename))
 	args = append(args, fmt.Sprintf("--tag=TITLE=\"%s\"", track.Title))
 	if track.Performer != "" {
 		args = append(args, fmt.Sprintf("--tag=ARTIST=\"%s\"", track.Performer))
