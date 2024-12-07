@@ -151,7 +151,7 @@ func main() {
 			if badRegionStart > trackEnd {
 				// Track is good, export it
 				log.Printf("Track %d good, export %s to %s\n", t+1, fmtTime(trackStart), fmtTime(trackEnd))
-				err = exportTrack(filename, track, t, t == len(cuesheet.Tracks)-1, trackStart, trackEnd)
+				err = exportTrack(filename, cuesheet, t, t == len(cuesheet.Tracks)-1, trackStart, trackEnd)
 				if err != nil {
 					log.Fatalln("Error exporting track: ", err)
 				}
@@ -174,7 +174,7 @@ func main() {
 		if badRegions[len(badRegions)-1].end < trackStart {
 			// No more bad regions left, track is good, export it
 			log.Printf("Track %d good, export %s to %s\n", t+1, fmtTime(trackStart), fmtTime(trackEnd))
-			err = exportTrack(filename, track, t, t == len(cuesheet.Tracks)-1, trackStart, trackEnd)
+			err = exportTrack(filename, cuesheet, t, t == len(cuesheet.Tracks)-1, trackStart, trackEnd)
 			if err != nil {
 				log.Fatalln("Error exporting track: ", err)
 			}
@@ -184,7 +184,8 @@ func main() {
 	log.Printf("Recovered %d of %d tracks\n", goodTracks, len(cuesheet.Tracks))
 }
 
-func exportTrack(original string, track *cuesheetgo.Track, trackNum int, lastTrack bool, start, end time.Duration) error {
+func exportTrack(original string, cuesheet *cuesheetgo.CueSheet, trackNum int, lastTrack bool, start, end time.Duration) error {
+	track := cuesheet.Tracks[trackNum]
 	if track.Title == "" {
 		return errors.New("no track title")
 	}
@@ -198,9 +199,27 @@ func exportTrack(original string, track *cuesheetgo.Track, trackNum int, lastTra
 	filename := fmt.Sprintf("%02d-%s.flac", trackNum+1, sanitizer.Replace(track.Title))
 	// full := filepath.Join(filepath.Dir(original), filename)
 	args = append(args, fmt.Sprintf("--output-name=%s", filename))
-	args = append(args, fmt.Sprintf("--tag=TITLE=\"%s\"", track.Title))
+	args = append(args, fmt.Sprintf("--tag=TRACK=%d", trackNum+1))
+	args = append(args, fmt.Sprintf("--tag=TITLE=%s", track.Title))
+	if cuesheet.AlbumTitle != "" {
+		args = append(args, fmt.Sprintf("--tag=ALBUM=%s", cuesheet.AlbumTitle))
+	}
+	if cuesheet.Date != "" {
+		args = append(args, fmt.Sprintf("--tag=YEAR=%s", cuesheet.Date))
+	}
+	if cuesheet.Genre != "" {
+		args = append(args, fmt.Sprintf("--tag=GENRE=%s", cuesheet.Genre))
+	}
+	artist := cuesheet.AlbumPerformer
 	if track.Performer != "" {
-		args = append(args, fmt.Sprintf("--tag=ARTIST=\"%s\"", track.Performer))
+		artist = track.Performer
+	}
+	if artist != "" {
+		args = append(args, fmt.Sprintf("--tag=ARTIST=%s", artist))
+		args = append(args, fmt.Sprintf("--tag=DISPLAYARTIST=%s", artist))
+	}
+	if cuesheet.AlbumPerformer != "" {
+		args = append(args, fmt.Sprintf("--tag=ALBUMARTIST=%s", cuesheet.AlbumPerformer))
 	}
 	if start > 0 {
 		args = append(args, fmt.Sprintf("--skip=%s", fmtTime(start)))
